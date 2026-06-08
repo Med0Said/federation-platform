@@ -1,0 +1,39 @@
+# ============================================================
+# Test profile — H2 in-memory database, Flyway disabled.
+# JPA creates schema from entities (ddl-auto: create-drop).
+# PostgreSQL-specific types (enums) are handled via VARCHAR.
+# ============================================================
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:federation_test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        # Map PostgreSQL custom enum columns to VARCHAR for H2 compatibility
+        type:
+          preferred_uuid_jdbc_type: VARCHAR
+
+  flyway:
+    enabled: false
+
+  # Faster BCrypt for tests
+app:
+  jwt:
+    secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+    expiration-ms: 3600000
+    refresh-expiration-ms: 86400000
+
+logging:
+  level:
+    com.federation: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
