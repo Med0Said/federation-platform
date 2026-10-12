@@ -1,0 +1,22 @@
+# ---- Frontend (Angular) ----
+node_modules/
+.angular/
+dist/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+
+# ---- Backend (Maven) ----
+target/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# ---- Local secrets ----
+.env
+.env.*
+!.env.example
