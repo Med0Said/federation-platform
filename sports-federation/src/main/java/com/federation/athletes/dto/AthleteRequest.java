@@ -46,6 +46,9 @@ public class AthleteRequest {
 
     private UUID clubId;
 
+    /** Portal account to link to this athlete (staff only). */
+    private UUID userId;
+
     @Email @Size(max = 255)
     private String email;
 

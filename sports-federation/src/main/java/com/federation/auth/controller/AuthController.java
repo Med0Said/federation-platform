@@ -3,6 +3,8 @@ package com.federation.auth.controller;
 import com.federation.auth.dto.*;
 import com.federation.auth.security.FederationUserDetails;
 import com.federation.auth.service.AuthService;
+import com.federation.auth.service.PasswordResetService;
+import com.federation.users.dto.UpdateUserRequest;
 import com.federation.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -35,7 +37,8 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private final AuthService authService;
+    private final AuthService          authService;
+    private final PasswordResetService passwordResetService;
 
     // ----------------------------------------------------------------
     // POST /auth/register
@@ -171,5 +174,50 @@ public class AuthController {
 
         authService.changePassword(principal.getId(), request);
         return ResponseEntity.ok(ApiResponse.ok(null, "Password updated. Please log in again."));
+    }
+
+    // ----------------------------------------------------------------
+    // PATCH /auth/me
+    // ----------------------------------------------------------------
+
+    @Operation(
+        summary  = "Update my profile",
+        description = "Updates first name, last name, phone and avatar URL. Null fields are left unchanged.",
+        security = @SecurityRequirement(name = "bearerAuth")
+    )
+    @PatchMapping("/me")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateMe(
+            @AuthenticationPrincipal FederationUserDetails principal,
+            @Valid @RequestBody UpdateUserRequest request) {
+
+        return ResponseEntity.ok(ApiResponse.ok(
+                authService.updateProfile(principal.getId(), request), "Profile updated."));
+    }
+
+    // ----------------------------------------------------------------
+    // POST /auth/forgot-password  +  POST /auth/reset-password
+    // ----------------------------------------------------------------
+
+    @Operation(
+        summary     = "Request a password reset e-mail",
+        description = "Always returns 200 so the endpoint cannot be used to discover registered e-mails."
+    )
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+
+        passwordResetService.requestReset(request.getEmail());
+        return ResponseEntity.ok(ApiResponse.ok(null,
+                "If an account exists for this e-mail, a reset link has been sent."));
+    }
+
+    @Operation(summary = "Set a new password using the token from the reset e-mail")
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+
+        passwordResetService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.ok(null, "Password updated. You can now log in."));
     }
 }

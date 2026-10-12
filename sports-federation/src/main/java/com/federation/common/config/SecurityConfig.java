@@ -31,8 +31,9 @@ import java.util.List;
  *
  * Authorization model:
  *  - PUBLIC_URLS  → no token required
- *  - GET on /clubs/** and /competitions/** → public read
- *  - /admin/**  → ROLE_ADMIN only
+ *  - GET on clubs, competitions, news, athletes and results → public read
+ *  - registrations → always authenticated
+ *  - /admin/** and /users/** → ROLE_ADMIN only
  *  - Everything else → authenticated (any role)
  *
  * Fine-grained method-level authorization uses @PreAuthorize on services/controllers.
@@ -58,6 +59,8 @@ public class SecurityConfig {
             "/auth/login",
             "/auth/register",
             "/auth/refresh",
+            "/auth/forgot-password",
+            "/auth/reset-password",
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
@@ -98,25 +101,19 @@ public class SecurityConfig {
                     .requestMatchers(PUBLIC_URLS).permitAll()
                     .requestMatchers("/auth/logout", "/auth/me", "/auth/change-password").authenticated()
 
-                    // Public read for catalogues
-                    .requestMatchers(HttpMethod.GET, "/clubs/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/competitions/**").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/news/**").permitAll()
+                    // Registrations are personal data — never public, even under public catalogues
+                    .requestMatchers("/competitions/*/registrations/**", "/athletes/*/registrations/**",
+                                     "/registrations/**").authenticated()
+
+                    // Public read for catalogues (private athlete fields are masked in AthleteService)
+                    .requestMatchers(HttpMethod.GET,
+                            "/clubs/**", "/competitions/**", "/news/**",
+                            "/athletes/**", "/results/**").permitAll()
 
                     // Admin-only
                     .requestMatchers(ADMIN_URLS).hasAuthority(UserRole.ADMIN)
 
-                    // Club management — admin or club manager
-                    .requestMatchers(HttpMethod.POST, "/clubs/**")
-                            .hasAnyAuthority(UserRole.ADMIN, UserRole.CLUB_MANAGER)
-                    .requestMatchers(HttpMethod.PUT, "/clubs/**")
-                            .hasAnyAuthority(UserRole.ADMIN, UserRole.CLUB_MANAGER)
-                    .requestMatchers(HttpMethod.PATCH, "/clubs/**")
-                            .hasAnyAuthority(UserRole.ADMIN, UserRole.CLUB_MANAGER)
-                    .requestMatchers(HttpMethod.DELETE, "/clubs/**")
-                            .hasAuthority(UserRole.ADMIN)
-
-                    // Any authenticated user for everything else
+                    // Writes: role and ownership rules are enforced by @PreAuthorize + AccessControl
                     .anyRequest().authenticated()
             )
 

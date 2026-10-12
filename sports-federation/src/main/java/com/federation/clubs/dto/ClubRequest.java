@@ -4,6 +4,8 @@ import com.federation.clubs.entity.ClubStatus;
 import jakarta.validation.constraints.*;
 import lombok.*;
 
+import java.util.UUID;
+
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class ClubRequest {
 
@@ -49,4 +51,7 @@ public class ClubRequest {
     private String phone;
 
     private ClubStatus status;
+
+    /** User with ROLE_CLUB_MANAGER who manages this club (staff only). */
+    private UUID managerId;
 }

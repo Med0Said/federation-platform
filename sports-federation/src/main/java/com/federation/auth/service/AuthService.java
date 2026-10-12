@@ -14,7 +14,9 @@ import com.federation.common.util.JwtTokenUtil;
 import com.federation.users.entity.User;
 import com.federation.users.entity.UserRole;
 import com.federation.users.entity.UserStatus;
+import com.federation.users.dto.UpdateUserRequest;
 import com.federation.users.repository.UserRepository;
+import com.federation.users.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -59,6 +61,7 @@ public class AuthService {
     private final AuthenticationManager  authManager;
     private final UserDetailsService     userDetailsService;
     private final AuthMapper             authMapper;
+    private final UserService            userService;
 
     // ----------------------------------------------------------------
     // Registration
@@ -215,6 +218,11 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
         return authMapper.toProfileResponse(user);
+    }
+
+    @Transactional
+    public UserProfileResponse updateProfile(UUID userId, UpdateUserRequest request) {
+        return authMapper.toProfileResponse(userService.updateOwnProfile(userId, request));
     }
 
     // ----------------------------------------------------------------

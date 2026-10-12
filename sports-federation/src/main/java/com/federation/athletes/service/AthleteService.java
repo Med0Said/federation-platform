@@ -9,25 +9,28 @@ import com.federation.athletes.mapper.AthleteMapper;
 import com.federation.athletes.repository.AthleteRepository;
 import com.federation.clubs.entity.Club;
 import com.federation.clubs.repository.ClubRepository;
+import com.federation.common.exception.BusinessRuleViolationException;
+import com.federation.common.exception.ForbiddenException;
 import com.federation.common.exception.ResourceAlreadyExistsException;
 import com.federation.common.exception.ResourceNotFoundException;
 import com.federation.common.response.PagedResponse;
+import com.federation.common.security.AccessControl;
 import com.federation.common.util.Gender;
+import com.federation.common.util.Specs;
+import com.federation.users.entity.User;
+import com.federation.users.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.Period;
+import java.util.Objects;
 import java.util.UUID;
-
-import java.util.List;
-import java.util.stream.Collectors;
-import org.springframework.data.domain.PageImpl;
 
 @Slf4j
 @Service
@@ -36,45 +39,37 @@ public class AthleteService {
 
     private final AthleteRepository athleteRepository;
     private final ClubRepository    clubRepository;
+    private final UserRepository    userRepository;
     private final AthleteMapper     athleteMapper;
+    private final AccessControl     access;
 
     // ── Read ──────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public PagedResponse<AthleteResponse> findAll(String search, String status,
-                                               String gender, String category,
-                                               UUID clubId, Pageable pageable) {
-    AthleteStatus as = parseEnum(AthleteStatus.class, status);
-    Gender        g  = parseEnum(Gender.class, gender);
-    AthleteCategory ac = parseEnum(AthleteCategory.class, category);
+                                                  String gender, String category,
+                                                  UUID clubId, Pageable pageable) {
+        Specification<Athlete> spec = Specification
+                .where(Specs.<Athlete>search(search, "firstName", "lastName", "licenseNumber"))
+                .and(Specs.eq("status",   Specs.parseEnum(AthleteStatus.class, status)))
+                .and(Specs.eq("gender",   Specs.parseEnum(Gender.class, gender)))
+                .and(Specs.eq("category", Specs.parseEnum(AthleteCategory.class, category)))
+                .and(Specs.eq("club.id",  clubId));
 
-    // Load all then filter — safe for current data volumes
-    List<Athlete> all = athleteRepository.findAll();
-    List<AthleteResponse> filtered = all.stream()
-        .filter(a -> search == null || search.isBlank() ||
-                a.getFirstName().toLowerCase().contains(search.toLowerCase()) ||
-                a.getLastName().toLowerCase().contains(search.toLowerCase()) ||
-                a.getLicenseNumber().toLowerCase().contains(search.toLowerCase()))
-        .filter(a -> as == null || a.getStatus() == as)
-        .filter(a -> g  == null || a.getGender() == g)
-        .filter(a -> ac == null || a.getCategory() == ac)
-        .filter(a -> clubId == null || (a.getClub() != null && a.getClub().getId().equals(clubId)))
-        .map(athleteMapper::toResponse)
-        .collect(Collectors.toList());
-
-    // Manual pagination
-    int pageNum  = pageable.getPageNumber();
-    int pageSize = pageable.getPageSize();
-    int from = Math.min(pageNum * pageSize, filtered.size());
-    int to   = Math.min(from + pageSize, filtered.size());
-    List<AthleteResponse> pageContent = filtered.subList(from, to);
-
-    return PagedResponse.of(new PageImpl<>(pageContent, pageable, filtered.size()));
-}
+        return PagedResponse.of(athleteRepository.findAll(spec, pageable).map(this::toVisibleResponse));
+    }
 
     @Transactional(readOnly = true)
     public AthleteResponse findById(UUID id) {
-        return athleteMapper.toResponse(getOrThrow(id));
+        return toVisibleResponse(getOrThrow(id));
+    }
+
+    /** The athlete profile linked to the current account (athlete portal). */
+    @Transactional(readOnly = true)
+    public AthleteResponse findMine() {
+        return athleteMapper.toResponse(access.currentAthlete()
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No athlete profile is linked to your account. Contact the federation.")));
     }
 
     // ── Write ─────────────────────────────────────────────────────────────
@@ -86,10 +81,13 @@ public class AthleteService {
             throw new ResourceAlreadyExistsException(
                     "License number '" + request.getLicenseNumber() + "' is already registered.");
         }
+        access.requireStaffOrClubManagerOf(request.getClubId(), "create athletes");
+
         Athlete athlete = athleteMapper.toEntity(request);
         resolveClub(athlete, request.getClubId());
+        resolveUser(athlete, request.getUserId());
         computeCategory(athlete);
-        if (athlete.getStatus() == null) athlete.setStatus(AthleteStatus.ACTIVE);
+        applyDefaults(athlete);
         Athlete saved = athleteRepository.save(athlete);
         log.info("Athlete created: {} {}", saved.getFirstName(), saved.getLastName());
         return athleteMapper.toResponse(saved);
@@ -99,9 +97,22 @@ public class AthleteService {
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_FEDERATION_STAFF','ROLE_CLUB_MANAGER')")
     public AthleteResponse update(UUID id, AthleteRequest request) {
         Athlete athlete = getOrThrow(id);
+        UUID currentClubId = athlete.getClub() != null ? athlete.getClub().getId() : null;
+        access.requireStaffOrClubManagerOf(currentClubId, "edit athletes");
+        if (!access.isStaff() && request.getClubId() != null && !request.getClubId().equals(currentClubId)) {
+            throw new ForbiddenException("Club transfers must be processed by federation staff.");
+        }
+        if (!athlete.getLicenseNumber().equals(request.getLicenseNumber())
+                && athleteRepository.existsByLicenseNumber(request.getLicenseNumber())) {
+            throw new ResourceAlreadyExistsException(
+                    "License number '" + request.getLicenseNumber() + "' is already registered.");
+        }
+
         athleteMapper.updateEntity(request, athlete);
         resolveClub(athlete, request.getClubId());
+        resolveUser(athlete, request.getUserId());
         computeCategory(athlete);
+        applyDefaults(athlete);
         Athlete saved = athleteRepository.save(athlete);
         log.info("Athlete updated: {}", id);
         return athleteMapper.toResponse(saved);
@@ -114,6 +125,7 @@ public class AthleteService {
             throw new ResourceNotFoundException("Athlete", "id", id);
         }
         athleteRepository.deleteById(id);
+        athleteRepository.flush();
         log.info("Athlete deleted: {}", id);
     }
 
@@ -132,6 +144,31 @@ public class AthleteService {
         }
     }
 
+    /** Links a portal account to the athlete (staff only; one account per athlete). */
+    private void resolveUser(Athlete athlete, UUID userId) {
+        UUID current = athlete.getUser() != null ? athlete.getUser().getId() : null;
+        if (userId == null || userId.equals(current)) return;
+        if (!access.isStaff()) {
+            throw new ForbiddenException("Only federation staff can link user accounts to athletes.");
+        }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        athleteRepository.findByUserId(userId)
+                .filter(other -> !Objects.equals(other.getId(), athlete.getId()))
+                .ifPresent(other -> {
+                    throw new BusinessRuleViolationException(
+                            "This account is already linked to athlete " + other.getFullName() + ".");
+                });
+        athlete.setUser(user);
+    }
+
+    /** NOT NULL columns with DB defaults — the mapper would otherwise write explicit nulls. */
+    private void applyDefaults(Athlete athlete) {
+        if (athlete.getNationality() == null || athlete.getNationality().isBlank()) athlete.setNationality("Tunisian");
+        if (athlete.getCountryCode() == null || athlete.getCountryCode().isBlank()) athlete.setCountryCode("TUN");
+        if (athlete.getStatus() == null) athlete.setStatus(AthleteStatus.ACTIVE);
+    }
+
     private void computeCategory(Athlete athlete) {
         if (athlete.getDateOfBirth() != null) {
             int age = Period.between(athlete.getDateOfBirth(), LocalDate.now()).getYears();
@@ -139,9 +176,23 @@ public class AthleteService {
         }
     }
 
-    private <E extends Enum<E>> E parseEnum(Class<E> clazz, String value) {
-        if (value == null || value.isBlank()) return null;
-        try { return Enum.valueOf(clazz, value.toUpperCase()); }
-        catch (IllegalArgumentException e) { return null; }
+    /**
+     * Public visitors and unrelated users get the sporting profile only;
+     * contact, emergency, medical and internal fields are hidden.
+     */
+    private AthleteResponse toVisibleResponse(Athlete athlete) {
+        AthleteResponse r = athleteMapper.toResponse(athlete);
+        if (!access.canAccessAthlete(athlete)) {
+            r.setEmail(null);
+            r.setPhone(null);
+            r.setEmergencyContactName(null);
+            r.setEmergencyContactPhone(null);
+            r.setMedicalClearanceDate(null);
+            r.setMedicalNotes(null);
+            r.setNotes(null);
+            r.setUserId(null);
+            r.setLicenseExpiry(null);
+        }
+        return r;
     }
 }

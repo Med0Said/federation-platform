@@ -1,0 +1,39 @@
+# ============================================================
+# Production profile — activate with SPRING_PROFILES_ACTIVE=prod
+#
+# Required environment variables (startup fails without them):
+#   DB_URL, DB_USERNAME, DB_PASSWORD
+#   JWT_SECRET            256-bit key, hex or base64
+#   CORS_ALLOWED_ORIGINS  comma-separated list, e.g. https://federation.example
+#   FRONTEND_URL          used in password-reset links
+# Optional: SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, MAIL_FROM
+# ============================================================
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  flyway:
+    baseline-on-migrate: false
+    # Schema only — the demo seed data in db/seed is never applied in production
+    locations: classpath:db/migration
+
+app:
+  frontend-url: ${FRONTEND_URL}
+  jwt:
+    secret: ${JWT_SECRET}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+springdoc:
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+
+logging:
+  level:
+    root: INFO
+    com.federation: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN

@@ -43,6 +43,7 @@ class AuthControllerTest {
     @Autowired MockMvc       mockMvc;
     @Autowired ObjectMapper  objectMapper;
     @MockBean  AuthService   authService;
+    @MockBean  com.federation.auth.service.PasswordResetService passwordResetService;
     @MockBean  JwtTokenUtil  jwtTokenUtil;
     @MockBean  UserDetailsService userDetailsService;
 

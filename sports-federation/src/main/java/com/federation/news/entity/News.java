@@ -29,13 +29,13 @@ public class News extends BaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, length = 20, columnDefinition = "news_category")
     @Builder.Default
     private NewsCategory category = NewsCategory.GENERAL;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 15)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, length = 15, columnDefinition = "news_status")
     @Builder.Default
     private NewsStatus status = NewsStatus.DRAFT;
 

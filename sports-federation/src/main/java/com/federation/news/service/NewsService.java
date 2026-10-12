@@ -1,5 +1,9 @@
 package com.federation.news.service;
 
+import com.federation.common.util.SecurityUtils;
+import com.federation.common.util.Specs;
+import com.federation.users.entity.UserRole;
+import org.springframework.data.jpa.domain.Specification;
 import com.federation.athletes.entity.Athlete;
 import com.federation.athletes.repository.AthleteRepository;
 import com.federation.clubs.entity.Club;
@@ -55,32 +59,40 @@ public class NewsService {
     @Transactional(readOnly = true)
     public PagedResponse<NewsResponse> findAll(String search, String status,
                                                 String category, Pageable pageable) {
-        NewsStatus   ns = parseEnum(NewsStatus.class, status);
-        NewsCategory nc = parseEnum(NewsCategory.class, category);
-        String s = blank(search) ? null : search;
+        NewsStatus ns = Specs.parseEnum(NewsStatus.class, status);
+        // Only editors may browse drafts / archived articles; everyone else sees published news
+        if (!canEdit()) ns = NewsStatus.PUBLISHED;
 
-        Page<News> page = newsRepository.findAllFiltered(s, ns, nc, pageable);
+        Specification<News> spec = Specification
+                .where(Specs.<News>search(search, "title", "excerpt"))
+                .and(Specs.eq("status",   ns))
+                .and(Specs.eq("category", Specs.parseEnum(NewsCategory.class, category)));
+
+        Page<News> page = newsRepository.findAll(spec, pageable);
         return PagedResponse.of(page.map(this::toResponse));
     }
 
     @Transactional(readOnly = true)
     public NewsResponse findById(UUID id) {
-        return toResponse(getOrThrow(id));
+        return toResponse(visibleOrThrow(getOrThrow(id)));
     }
 
     @Transactional(readOnly = true)
     public NewsResponse findBySlug(String slug) {
         News news = newsRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("News", "slug", slug));
-        return toResponse(news);
+        return toResponse(visibleOrThrow(news));
     }
 
     @Transactional
     public NewsResponse findBySlugAndIncrementViews(String slug) {
         News news = newsRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("News", "slug", slug));
-        newsRepository.incrementViewCount(news.getId());
-        return toResponse(news);
+        visibleOrThrow(news);
+        newsRepository.incrementViewCount(news.getId()); // atomic UPDATE; entity copy stays managed
+        NewsResponse response = toResponse(news);
+        response.setViewCount(news.getViewCount() + 1);
+        return response;
     }
 
     @Transactional(readOnly = true)
@@ -101,6 +113,9 @@ public class NewsService {
         if (news.getStatus() == null)    news.setStatus(NewsStatus.DRAFT);
         if (news.getCategory() == null)  news.setCategory(NewsCategory.GENERAL);
         if (news.getLanguage() == null)  news.setLanguage("fr");
+        if (news.getAuthor() == null) {
+            SecurityUtils.currentUserId().flatMap(userRepository::findById).ifPresent(news::setAuthor);
+        }
         if (news.getStatus() == NewsStatus.PUBLISHED && news.getPublishedAt() == null) {
             news.setPublishedAt(Instant.now());
         }
@@ -143,6 +158,18 @@ public class NewsService {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    /** Drafts and archived articles are only visible to editors (404 for everyone else). */
+    private News visibleOrThrow(News news) {
+        if (news.getStatus() != NewsStatus.PUBLISHED && !canEdit()) {
+            throw new ResourceNotFoundException("News", "id", news.getId());
+        }
+        return news;
+    }
+
+    private boolean canEdit() {
+        return SecurityUtils.hasAnyAuthority(UserRole.ADMIN, UserRole.FEDERATION_STAFF);
+    }
 
     private News getOrThrow(UUID id) {
         return newsRepository.findById(id)
@@ -210,11 +237,6 @@ public class NewsService {
         return slug;
     }
 
-    private <E extends Enum<E>> E parseEnum(Class<E> clazz, String value) {
-        if (blank(value)) return null;
-        try { return Enum.valueOf(clazz, value.toUpperCase()); }
-        catch (IllegalArgumentException e) { return null; }
-    }
 
     private boolean blank(String s) { return s == null || s.isBlank(); }
 }

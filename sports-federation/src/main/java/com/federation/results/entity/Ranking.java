@@ -43,8 +43,8 @@ public class Ranking extends BaseEntity {
     @Builder.Default
     private String round = "FINAL";
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 10)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.NAMED_ENUM)
+    @Column(length = 10, columnDefinition = "medal_type")
     private MedalType medal;
 
     @Column(name = "performance_value", precision = 12, scale = 4)

@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import com.federation.common.util.PageRequests;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -35,13 +36,14 @@ public class ClubController {
             @RequestParam(defaultValue = "24") int size,
             @RequestParam(defaultValue = "name,asc") String sort) {
 
-        String[] sortParts = sort.split(",");
-        Sort s = sortParts.length > 1
-                ? Sort.by(Sort.Direction.fromString(sortParts[1]), sortParts[0])
-                : Sort.by(Sort.Direction.ASC, sortParts[0]);
-
-        Pageable pageable = PageRequest.of(page, size, s);
+        Pageable pageable = PageRequests.of(page, size, sort, Sort.by("name"));
         return ResponseEntity.ok(ApiResponse.ok(clubService.findAll(search, status, pageable)));
+    }
+
+    @Operation(summary = "Clubs managed by the current user")
+    @GetMapping("/mine")
+    public ResponseEntity<ApiResponse<java.util.List<ClubResponse>>> findMine() {
+        return ResponseEntity.ok(ApiResponse.ok(clubService.findMine()));
     }
 
     @Operation(summary = "Get a club by ID")

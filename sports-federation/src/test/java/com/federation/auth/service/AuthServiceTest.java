@@ -51,6 +51,7 @@ class AuthServiceTest {
     @Mock AuthenticationManager  authManager;
     @Mock UserDetailsService     userDetailsService;
     @Mock AuthMapper             authMapper;
+    @Mock com.federation.users.service.UserService userService;
 
     @InjectMocks AuthService authService;
 

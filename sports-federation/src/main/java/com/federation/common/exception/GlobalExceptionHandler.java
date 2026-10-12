@@ -22,6 +22,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.data.mapping.PropertyReferenceException;
 
 import java.util.List;
 
@@ -165,7 +167,11 @@ public class GlobalExceptionHandler {
             RuntimeException ex,
             HttpServletRequest request) {
 
-        return buildError(HttpStatus.FORBIDDEN, "You do not have permission to perform this action.", request);
+        // ForbiddenException carries a business explanation (e.g. "only clubs you manage"); keep it
+        String message = ex instanceof ForbiddenException && ex.getMessage() != null
+                ? ex.getMessage()
+                : "You do not have permission to perform this action.";
+        return buildError(HttpStatus.FORBIDDEN, message, request);
     }
 
     // ----------------------------------------------------------------
@@ -188,6 +194,26 @@ public class GlobalExceptionHandler {
         return buildError(HttpStatus.NOT_FOUND,
                 String.format("No endpoint found for [%s %s].", ex.getHttpMethod(), ex.getRequestURL()),
                 request);
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResource(
+            NoResourceFoundException ex,
+            HttpServletRequest request) {
+
+        return buildError(HttpStatus.NOT_FOUND,
+                String.format("No endpoint found for [%s %s].", request.getMethod(), request.getRequestURI()),
+                request);
+    }
+
+    /** Unknown {@code sort=} property on a list endpoint. */
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBadSortProperty(
+            PropertyReferenceException ex,
+            HttpServletRequest request) {
+
+        return buildError(HttpStatus.BAD_REQUEST,
+                "Invalid sort property '" + ex.getPropertyName() + "'.", request);
     }
 
     // ----------------------------------------------------------------

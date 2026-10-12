@@ -1,17 +1,22 @@
+# ============================================================
+# Default configuration (local development).
+# Every environment-specific value can be overridden with an
+# environment variable — see application-prod.yml and README.
+# ============================================================
 spring:
   application:
     name: sports-federation
 
   # ===== DATABASE =====
   datasource:
-    url: jdbc:postgresql://localhost:5432/federation_db
-    username: federation_user
-    password: federation_pass
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/federation_db}
+    username: ${DB_USERNAME:federation_user}
+    password: ${DB_PASSWORD:federation_pass}
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-timeout: 20000
-      maximum-pool-size: 10
-      minimum-idle: 5
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+      minimum-idle: 2
       idle-timeout: 300000
       pool-name: FederationHikariPool
 
@@ -23,7 +28,6 @@ spring:
     open-in-view: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
         default_schema: public
         jdbc:
@@ -34,7 +38,8 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
-    locations: classpath:db/migration
+    # db/seed holds demo data (V12) — excluded in the prod profile
+    locations: ${FLYWAY_LOCATIONS:classpath:db/migration,classpath:db/seed}
     schemas: public
 
   # ===== JACKSON =====
@@ -46,9 +51,21 @@ spring:
       fail-on-unknown-properties: false
     time-zone: UTC
 
+  # ===== MAIL (optional) =====
+  # Password-reset e-mails are only sent when SMTP_HOST is set;
+  # otherwise the reset link is written to the application log.
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:true}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:true}
+
 # ===== SERVER =====
 server:
-  port: 8080
+  port: ${PORT:8080}
   error:
     include-message: always
     include-binding-errors: always
@@ -56,17 +73,20 @@ server:
   servlet:
     context-path: /api
 
-# ===== SECURITY / JWT =====
+# ===== APPLICATION =====
 app:
+  frontend-url: ${FRONTEND_URL:http://localhost:4200}
+  mail:
+    from: ${MAIL_FROM:no-reply@federation.local}
+  password-reset:
+    ttl: PT1H
   jwt:
-    secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970" # Override in prod via env var
-    expiration-ms: 86400000 # 24h
-    refresh-expiration-ms: 604800000 # 7 days
+    # Development-only default — production MUST set JWT_SECRET (256-bit hex or base64)
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiration-ms: ${JWT_EXPIRATION_MS:3600000}               # 1 hour
+    refresh-expiration-ms: ${JWT_REFRESH_EXPIRATION_MS:604800000} # 7 days
   cors:
-    allowed-origins:
-      - "http://localhost:3000"
-      - "http://localhost:5173"
-      - "http://localhost:4200"
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:3000,http://localhost:5173}
     allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
     allowed-headers: "*"
     max-age: 3600
@@ -80,6 +100,9 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+  health:
+    mail:
+      enabled: false
 
 # ===== OPENAPI =====
 springdoc:
@@ -96,8 +119,7 @@ logging:
   level:
     root: INFO
     com.federation: DEBUG
-    org.springframework.security: DEBUG
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    org.springframework.security: INFO
+    org.hibernate.SQL: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

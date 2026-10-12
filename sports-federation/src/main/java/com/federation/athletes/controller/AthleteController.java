@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import com.federation.common.util.PageRequests;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -38,14 +39,15 @@ public class AthleteController {
             @RequestParam(defaultValue = "25")            int    size,
             @RequestParam(defaultValue = "lastName,asc")  String sort) {
 
-        String[] sp = sort.split(",");
-        Sort s = sp.length > 1
-                ? Sort.by(Sort.Direction.fromString(sp[1]), sp[0])
-                : Sort.by(Sort.Direction.ASC, sp[0]);
-
-        Pageable pageable = PageRequest.of(page, size, s);
+        Pageable pageable = PageRequests.of(page, size, sort, Sort.by("lastName"));
         return ResponseEntity.ok(ApiResponse.ok(
                 athleteService.findAll(search, status, gender, category, clubId, pageable)));
+    }
+
+    @Operation(summary = "Get the athlete profile linked to the current account")
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<AthleteResponse>> findMine() {
+        return ResponseEntity.ok(ApiResponse.ok(athleteService.findMine()));
     }
 
     @Operation(summary = "Get athlete by ID")

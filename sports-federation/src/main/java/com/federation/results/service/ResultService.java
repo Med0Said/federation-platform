@@ -2,8 +2,12 @@ package com.federation.results.service;
 
 import com.federation.athletes.entity.Athlete;
 import com.federation.athletes.repository.AthleteRepository;
+import com.federation.common.exception.BadRequestException;
+import com.federation.common.exception.ResourceAlreadyExistsException;
 import com.federation.common.exception.ResourceNotFoundException;
 import com.federation.common.response.PagedResponse;
+import com.federation.common.util.SecurityUtils;
+import com.federation.common.util.Specs;
 import com.federation.competitions.entity.Competition;
 import com.federation.competitions.entity.CompetitionEvent;
 import com.federation.competitions.repository.CompetitionEventRepository;
@@ -16,30 +20,41 @@ import com.federation.results.entity.ResultStatus;
 import com.federation.results.mapper.ResultMapper;
 import com.federation.results.repository.RankingRepository;
 import com.federation.results.repository.ResultRepository;
+import com.federation.users.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Results recording. Every write recalculates the rankings of the affected
+ * event round(s) through {@link RankingService}.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class ResultService {
 
-    private final ResultRepository      resultRepository;
-    private final RankingRepository     rankingRepository;
-    private final CompetitionRepository competitionRepository;
+    private final ResultRepository           resultRepository;
+    private final RankingRepository          rankingRepository;
+    private final CompetitionRepository      competitionRepository;
     private final CompetitionEventRepository eventRepository;
-    private final AthleteRepository     athleteRepository;
-    private final ResultMapper          resultMapper;
+    private final AthleteRepository          athleteRepository;
+    private final UserRepository             userRepository;
+    private final RankingService             rankingService;
+    private final ResultMapper               resultMapper;
 
     // ── Read ──────────────────────────────────────────────────────────────
 
@@ -47,10 +62,13 @@ public class ResultService {
     public PagedResponse<ResultResponse> findAll(UUID competitionId, UUID eventId,
                                                   UUID athleteId, String status,
                                                   Pageable pageable) {
-        ResultStatus rs = parseEnum(ResultStatus.class, status);
-        Page<Result> page = resultRepository.findAllFiltered(competitionId, eventId, athleteId, rs, pageable);
+        Specification<Result> spec = Specification
+                .where(Specs.<Result>eq("competition.id", competitionId))
+                .and(Specs.eq("event.id",   eventId))
+                .and(Specs.eq("athlete.id", athleteId))
+                .and(Specs.eq("status",     Specs.parseEnum(ResultStatus.class, status)));
+        Page<Result> page = resultRepository.findAll(spec, pageable);
 
-        // Enrich with ranking positions
         Page<ResultResponse> mapped = page.map(result -> {
             ResultResponse r = resultMapper.toResponse(result);
             enrichWithRanking(r, result);
@@ -67,16 +85,18 @@ public class ResultService {
         return r;
     }
 
+    /** All results of an event round, best rank first; unranked (DNS/DNF/DSQ) results last. */
     @Transactional(readOnly = true)
     public List<ResultResponse> findByEventAndRound(UUID eventId, String round) {
-        String r = (round == null || round.isBlank()) ? "FINAL" : round.toUpperCase();
-        List<Ranking> rankings = rankingRepository.findByEventIdAndRoundOrderByRankPositionAsc(eventId, r);
-
-        Map<UUID, Ranking> rankMap = rankings.stream()
-                .collect(Collectors.toMap(rk -> rk.getResult().getId(), rk -> rk));
-
-        return resultRepository.findByCompetitionIdAndEventIdAndRound(null, eventId, r)
+        if (!eventRepository.existsById(eventId)) {
+            throw new ResourceNotFoundException("CompetitionEvent", "id", eventId);
+        }
+        String r = RankingService.normaliseRound(round);
+        Map<UUID, Ranking> rankMap = rankingRepository.findByEventIdAndRoundOrderByRankPositionAsc(eventId, r)
                 .stream()
+                .collect(Collectors.toMap(rk -> rk.getResult().getId(), Function.identity()));
+
+        return resultRepository.findByEventIdAndRound(eventId, r).stream()
                 .map(result -> {
                     ResultResponse resp = resultMapper.toResponse(result);
                     Ranking rk = rankMap.get(result.getId());
@@ -86,7 +106,13 @@ public class ResultService {
                     }
                     return resp;
                 })
-                .collect(Collectors.toList());
+                .sorted((a, b) -> {
+                    if (a.getRankPosition() == null && b.getRankPosition() == null) return 0;
+                    if (a.getRankPosition() == null) return 1;
+                    if (b.getRankPosition() == null) return -1;
+                    return Integer.compare(a.getRankPosition(), b.getRankPosition());
+                })
+                .toList();
     }
 
     // ── Write ─────────────────────────────────────────────────────────────
@@ -94,32 +120,63 @@ public class ResultService {
     @Transactional
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_FEDERATION_STAFF')")
     public ResultResponse create(ResultRequest request) {
+        String round = RankingService.normaliseRound(request.getRound());
+        if (resultRepository.existsByAthleteIdAndEventIdAndRound(request.getAthleteId(), request.getEventId(), round)) {
+            throw new ResourceAlreadyExistsException(
+                    "A result already exists for this athlete in this event and round. Update it instead.");
+        }
         Result result = resultMapper.toEntity(request);
         resolveRelations(result, request);
+        result.setRound(round);
         if (result.getStatus() == null) result.setStatus(ResultStatus.UNOFFICIAL);
-        if (result.getRound() == null)  result.setRound("FINAL");
-        Result saved = resultRepository.save(result);
+        SecurityUtils.currentUserId().flatMap(userRepository::findById).ifPresent(result::setRecordedBy);
+        applyVerification(result);
+
+        Result saved = resultRepository.saveAndFlush(result);
+        rankingService.recalculate(saved.getEvent().getId(), round);
         log.info("Result recorded for athlete {} in event {}", request.getAthleteId(), request.getEventId());
-        return resultMapper.toResponse(saved);
+        return findById(saved.getId());
     }
 
     @Transactional
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_FEDERATION_STAFF')")
     public ResultResponse update(UUID id, ResultRequest request) {
         Result result = getOrThrow(id);
+        UUID   oldEventId = result.getEvent().getId();
+        String oldRound   = result.getRound();
+
         resultMapper.updateEntity(request, result);
         resolveRelations(result, request);
-        Result saved = resultRepository.save(result);
+        result.setRound(RankingService.normaliseRound(request.getRound() != null ? request.getRound() : oldRound));
+
+        if (!Objects.equals(oldEventId, result.getEvent().getId()) || !Objects.equals(oldRound, result.getRound())) {
+            if (resultRepository.existsByAthleteIdAndEventIdAndRound(
+                    result.getAthlete().getId(), result.getEvent().getId(), result.getRound())) {
+                throw new ResourceAlreadyExistsException(
+                        "A result already exists for this athlete in the target event and round.");
+            }
+        }
+        applyVerification(result);
+        Result saved = resultRepository.saveAndFlush(result);
+
+        rankingService.recalculate(saved.getEvent().getId(), saved.getRound());
+        if (!Objects.equals(oldEventId, saved.getEvent().getId()) || !Objects.equals(oldRound, saved.getRound())) {
+            rankingService.recalculate(oldEventId, oldRound);
+        }
         log.info("Result updated: {}", id);
-        return resultMapper.toResponse(saved);
+        return findById(saved.getId());
     }
 
     @Transactional
     @PreAuthorize("hasAnyAuthority('ROLE_ADMIN','ROLE_FEDERATION_STAFF')")
     public void delete(UUID id) {
-        if (!resultRepository.existsById(id))
-            throw new ResourceNotFoundException("Result", "id", id);
-        resultRepository.deleteById(id);
+        Result result = getOrThrow(id);
+        UUID   eventId = result.getEvent().getId();
+        String round   = result.getRound();
+        rankingRepository.deleteByResult(id);
+        resultRepository.delete(result);
+        resultRepository.flush();
+        rankingService.recalculate(eventId, round);
         log.info("Result deleted: {}", id);
     }
 
@@ -133,15 +190,34 @@ public class ResultService {
     private void resolveRelations(Result result, ResultRequest request) {
         Competition competition = competitionRepository.findById(request.getCompetitionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Competition", "id", request.getCompetitionId()));
-        result.setCompetition(competition);
-
         CompetitionEvent event = eventRepository.findById(request.getEventId())
                 .orElseThrow(() -> new ResourceNotFoundException("CompetitionEvent", "id", request.getEventId()));
-        result.setEvent(event);
-
+        if (!event.getCompetition().getId().equals(competition.getId())) {
+            throw new BadRequestException("Event does not belong to the given competition.");
+        }
         Athlete athlete = athleteRepository.findById(request.getAthleteId())
                 .orElseThrow(() -> new ResourceNotFoundException("Athlete", "id", request.getAthleteId()));
+
+        result.setCompetition(competition);
+        result.setEvent(event);
         result.setAthlete(athlete);
+        if (result.getPerformanceUnit() == null) result.setPerformanceUnit(event.getScoringUnit());
+    }
+
+    /** OFFICIAL results carry who verified them and when (DB check constraint keeps both in sync). */
+    private void applyVerification(Result result) {
+        if (result.getStatus() == ResultStatus.OFFICIAL) {
+            if (result.getVerifiedAt() == null) {
+                var verifier = SecurityUtils.currentUserId().flatMap(userRepository::findById).orElse(null);
+                if (verifier != null) {
+                    result.setVerifiedBy(verifier);
+                    result.setVerifiedAt(Instant.now());
+                }
+            }
+        } else {
+            result.setVerifiedBy(null);
+            result.setVerifiedAt(null);
+        }
     }
 
     private void enrichWithRanking(ResultResponse resp, Result result) {
@@ -154,11 +230,5 @@ public class ResultService {
                     resp.setRankPosition(rk.getRankPosition());
                     if (rk.getMedal() != null) resp.setMedal(rk.getMedal().name());
                 });
-    }
-
-    private <E extends Enum<E>> E parseEnum(Class<E> clazz, String value) {
-        if (value == null || value.isBlank()) return null;
-        try { return Enum.valueOf(clazz, value.toUpperCase()); }
-        catch (IllegalArgumentException e) { return null; }
     }
 }

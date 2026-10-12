@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import com.federation.common.util.PageRequests;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -36,14 +37,9 @@ public class CompetitionController {
             @RequestParam(defaultValue = "20")           int    size,
             @RequestParam(defaultValue = "startDate,asc") String sort) {
 
-        String[] sp = sort.split(",");
-        Sort s = sp.length > 1
-                ? Sort.by(Sort.Direction.fromString(sp[1]), sp[0])
-                : Sort.by(Sort.Direction.ASC, sp[0]);
-
         return ResponseEntity.ok(ApiResponse.ok(
                 competitionService.findAll(search, status, from, to,
-                        PageRequest.of(page, size, s))));
+                        PageRequests.of(page, size, sort, Sort.by("startDate")))));
     }
 
     @Operation(summary = "Get competition by ID")

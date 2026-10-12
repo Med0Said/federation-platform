@@ -34,6 +34,7 @@ public class AthleteResponse {
     private String          emergencyContactName;
     private String          emergencyContactPhone;
     private LocalDate       medicalClearanceDate;
+    private String          medicalNotes;
     private String          photoUrl;
     private String          notes;
     private UUID            userId;
