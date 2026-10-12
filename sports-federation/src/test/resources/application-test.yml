@@ -1,0 +1,26 @@
+# ============================================================
+# Test profile — real PostgreSQL 16 started in-process by
+# zonky embedded-postgres (see @AutoConfigureEmbeddedDatabase).
+# Flyway runs every migration, Hibernate validates the mapping.
+# ============================================================
+
+spring:
+  jpa:
+    show-sql: false
+  flyway:
+    enabled: true
+
+app:
+  jwt:
+    secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+    expiration-ms: 3600000
+    refresh-expiration-ms: 86400000
+
+logging:
+  level:
+    root: WARN
+    com.federation: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    io.zonky: WARN

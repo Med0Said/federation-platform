@@ -18,7 +18,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import com.federation.common.config.*;
+import com.federation.common.util.JwtTokenUtil;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.UUID;
@@ -28,16 +30,31 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AuthController.class)
+@Import({SecurityConfig.class, JwtAuthEntryPoint.class, JwtAccessDeniedHandler.class,
+         CorsProperties.class, JwtAuthenticationFilter.class})
 @DisplayName("AuthController — MockMvc")
 class AuthControllerTest {
 
     @Autowired MockMvc       mockMvc;
     @Autowired ObjectMapper  objectMapper;
     @MockBean  AuthService   authService;
+    @MockBean  JwtTokenUtil  jwtTokenUtil;
+    @MockBean  UserDetailsService userDetailsService;
+
+    /** Real FederationUserDetails principal so @AuthenticationPrincipal resolves. */
+    private static FederationUserDetails principal() {
+        User u = User.builder()
+                .email("user@test.local").username("testuser").password("x")
+                .firstName("Test").lastName("User")
+                .role(UserRole.ROLE_PUBLIC).status(UserStatus.ACTIVE).build();
+        u.setId(UUID.randomUUID());
+        return new FederationUserDetails(u);
+    }
 
     private AuthResponse sampleAuthResponse;
 
@@ -224,12 +241,10 @@ class AuthControllerTest {
     class LogoutEndpoint {
 
         @Test
-        @WithMockUser(username = "user@test.local", roles = "PUBLIC")
         @DisplayName("200 when authenticated")
         void ok() throws Exception {
             // AuthService.logout needs a UUID from FederationUserDetails
-            // WithMockUser injects a default UserDetails, so we just verify 200
-            mockMvc.perform(post("/auth/logout"))
+            mockMvc.perform(post("/auth/logout").with(user(principal())))
                     .andExpect(status().isOk());
         }
 
@@ -250,7 +265,6 @@ class AuthControllerTest {
     class MeEndpoint {
 
         @Test
-        @WithMockUser(username = "user@test.local", roles = "PUBLIC")
         @DisplayName("200 when authenticated")
         void ok() throws Exception {
             UserProfileResponse profile = UserProfileResponse.builder()
@@ -266,7 +280,7 @@ class AuthControllerTest {
 
             given(authService.getProfile(any())).willReturn(profile);
 
-            mockMvc.perform(get("/auth/me"))
+            mockMvc.perform(get("/auth/me").with(user(principal())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.success").value(true));
         }
@@ -288,10 +302,9 @@ class AuthControllerTest {
     class ChangePasswordEndpoint {
 
         @Test
-        @WithMockUser(username = "user@test.local", roles = "PUBLIC")
         @DisplayName("200 on valid request")
         void ok() throws Exception {
-            mockMvc.perform(patch("/auth/change-password")
+            mockMvc.perform(patch("/auth/change-password").with(user(principal()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     new ChangePasswordRequest("Old@1234", "New@1234", "New@1234"))))
@@ -309,10 +322,9 @@ class AuthControllerTest {
         }
 
         @Test
-        @WithMockUser(username = "user@test.local", roles = "PUBLIC")
         @DisplayName("400 when new password is too weak")
         void weakNewPassword() throws Exception {
-            mockMvc.perform(patch("/auth/change-password")
+            mockMvc.perform(patch("/auth/change-password").with(user(principal()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(
                                     new ChangePasswordRequest("Old@1234", "weak", "weak"))))

@@ -5,6 +5,9 @@ import com.federation.users.entity.User;
 import com.federation.users.entity.UserRole;
 import com.federation.users.entity.UserStatus;
 import com.federation.users.repository.UserRepository;
+import com.federation.common.config.JpaConfig;
+import org.springframework.context.annotation.Import;
+import io.zonky.test.db.AutoConfigureEmbeddedDatabase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -15,10 +18,13 @@ import org.springframework.test.context.ActiveProfiles;
 import java.time.Instant;
 import java.util.Optional;
 
+import static io.zonky.test.db.AutoConfigureEmbeddedDatabase.DatabaseProvider.ZONKY;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@AutoConfigureEmbeddedDatabase(provider = ZONKY)
 @ActiveProfiles("test")
+@Import(JpaConfig.class)
 @DisplayName("RefreshTokenRepository — @DataJpaTest")
 class RefreshTokenRepositoryTest {
 

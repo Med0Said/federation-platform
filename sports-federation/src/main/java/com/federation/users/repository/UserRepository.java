@@ -60,19 +60,19 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // Mutations (avoid loading the entity just to change one field)
     // ----------------------------------------------------------------
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.lastLogin = :timestamp WHERE u.id = :id")
     void updateLastLogin(@Param("id") UUID id, @Param("timestamp") Instant timestamp);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.status = :status WHERE u.id = :id")
     void updateStatus(@Param("id") UUID id, @Param("status") UserStatus status);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.role = :role WHERE u.id = :id")
     void updateRole(@Param("id") UUID id, @Param("role") UserRole role);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE User u SET u.password = :password WHERE u.id = :id")
     void updatePassword(@Param("id") UUID id, @Param("password") String password);
 }

@@ -34,7 +34,7 @@ public interface NewsRepository extends JpaRepository<News, UUID> {
             @Param("category") NewsCategory category,
             Pageable pageable);
 
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE News n SET n.viewCount = n.viewCount + 1 WHERE n.id = :id")
     void incrementViewCount(@Param("id") UUID id);
 }

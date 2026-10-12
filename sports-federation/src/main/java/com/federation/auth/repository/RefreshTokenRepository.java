@@ -17,18 +17,18 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     Optional<RefreshToken> findByToken(String token);
 
     /** Revoke every active token for a user — called on logout. */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE RefreshToken rt SET rt.revoked = true " +
            "WHERE rt.user.id = :userId AND rt.revoked = false")
     int revokeAllUserTokens(@Param("userId") UUID userId);
 
     /** Revoke a specific token by its value — called on token rotation. */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE RefreshToken rt SET rt.revoked = true WHERE rt.token = :token")
     void revokeByToken(@Param("token") String token);
 
     /** Housekeeping — called nightly by {@link com.federation.common.util.TokenCleanupTask}. */
-    @Modifying
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM RefreshToken rt WHERE rt.expiresAt < :now OR rt.revoked = true")
     int deleteExpiredAndRevoked(@Param("now") Instant now);
 

@@ -16,6 +16,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -71,6 +72,7 @@ public class JwtTokenUtil {
         return Jwts.builder()
                 .claims(extraClaims)
                 .subject(subject)
+                .id(UUID.randomUUID().toString()) // jti — makes every token unique, even within the same second
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + ttlMs))
                 .signWith(getSigningKey())

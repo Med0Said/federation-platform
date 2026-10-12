@@ -1,6 +1,7 @@
 package com.federation.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.federation.BaseIntegrationTest;
 import com.federation.auth.dto.*;
 import com.federation.common.response.ApiResponse;
 import org.junit.jupiter.api.*;
@@ -19,16 +20,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Full end-to-end authentication flow tests.
  *
- * Uses the full Spring context with H2 (profile=test, Flyway disabled).
+ * Uses the full Spring context against embedded PostgreSQL (profile=test).
  * Tests run in order to share session state across the flow:
  *   register → login → me → refresh → change-password → logout
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("Auth — End-to-End Flow")
-class AuthIntegrationTest {
+class AuthIntegrationTest extends BaseIntegrationTest {
 
     @Autowired MockMvc      mockMvc;
     @Autowired ObjectMapper objectMapper;

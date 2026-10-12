@@ -72,8 +72,8 @@ class AuthServiceTest {
         // so we simulate a persisted state by using a real UUID in tests
         userDetails = new FederationUserDetails(activeUser);
 
-        given(jwtProperties.getExpirationMs()).willReturn(3_600_000L);
-        given(jwtProperties.getRefreshExpirationMs()).willReturn(86_400_000L);
+        lenient().when(jwtProperties.getExpirationMs()).thenReturn(3_600_000L);
+        lenient().when(jwtProperties.getRefreshExpirationMs()).thenReturn(86_400_000L);
     }
 
     // ================================================================
