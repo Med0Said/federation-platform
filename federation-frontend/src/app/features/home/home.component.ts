@@ -1,4 +1,5 @@
-import { Component } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
+import { ApiService } from '@core/services/api.service';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -85,13 +86,22 @@ import { MatIconModule }   from '@angular/material/icon';
     </section>
   `,
 })
-export class HomeComponent {
+export class HomeComponent implements OnInit {
+  private api = inject(ApiService);
+
+  // Live figures from the public catalogue endpoints (totalElements of a 1-row page)
   readonly stats = [
-    { value: '1,200+', label: 'Registered Athletes' },
-    { value: '45',     label: 'Active Clubs' },
-    { value: '120+',   label: 'Competitions / Year' },
-    { value: '8,000+', label: 'Recorded Results' },
+    { value: '—', label: 'Active Athletes',       path: '/athletes',     params: { status: 'ACTIVE' } },
+    { value: '—', label: 'Active Clubs',          path: '/clubs',        params: { status: 'ACTIVE' } },
+    { value: '—', label: 'Upcoming Competitions', path: '/competitions', params: { from: new Date().toISOString().substring(0, 10) } },
+    { value: '—', label: 'Recorded Results',      path: '/results',      params: {} as Record<string, string> },
   ];
+
+  ngOnInit(): void {
+    this.stats.forEach(stat =>
+      this.api.getPaged<unknown>(stat.path, { ...stat.params, size: 1 })
+        .subscribe({ next: p => stat.value = p.totalElements.toLocaleString(), error: () => {} }));
+  }
 
   readonly featureCards = [
     {

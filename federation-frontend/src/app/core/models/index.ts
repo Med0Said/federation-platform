@@ -120,3 +120,5 @@ export interface NavItem {
   roles?:   UserRole[];
   children?: NavItem[];
 }
+
+export * from './domain';

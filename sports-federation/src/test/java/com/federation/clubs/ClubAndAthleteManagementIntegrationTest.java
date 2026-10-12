@@ -110,7 +110,7 @@ class ClubAndAthleteManagementIntegrationTest extends ApiTestSupport {
     @DisplayName("competition events CRUD with unique codes")
     void competitionEvents() throws Exception {
         String comp = createCompetition("DRAFT", null, null);
-        JsonNode competition = data(mockMvc.perform(get("/competitions/" + comp)).andReturn());
+        JsonNode competition = data(mockMvc.perform(as(STAFF, get("/competitions/" + comp))).andReturn());
         assertThat(competition.path("venueCountry").asText()).isEqualTo("TN");
         assertThat(competition.path("level").asText()).isEqualTo("NATIONAL");
 
@@ -138,13 +138,13 @@ class ClubAndAthleteManagementIntegrationTest extends ApiTestSupport {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("200m Women Senior"));
 
-        mockMvc.perform(get("/competitions/" + comp + "/events/" + eventId))
+        mockMvc.perform(as(STAFF, get("/competitions/" + comp + "/events/" + eventId)))
                 .andExpect(jsonPath("$.data.ageCategory").value("SENIOR"));
-        mockMvc.perform(get("/competitions/" + comp)).andExpect(jsonPath("$.data.eventCount").value(1));
+        mockMvc.perform(as(STAFF, get("/competitions/" + comp))).andExpect(jsonPath("$.data.eventCount").value(1));
 
         // Event id under the wrong competition → 404
         String other = createCompetition("DRAFT", null, null);
-        mockMvc.perform(get("/competitions/" + other + "/events/" + eventId)).andExpect(status().isNotFound());
+        mockMvc.perform(as(STAFF, get("/competitions/" + other + "/events/" + eventId))).andExpect(status().isNotFound());
 
         mockMvc.perform(as(STAFF, delete("/competitions/" + comp + "/events/" + eventId))).andExpect(status().isOk());
         mockMvc.perform(as(ADMIN, delete("/competitions/" + comp))).andExpect(status().isOk());
@@ -154,7 +154,7 @@ class ClubAndAthleteManagementIntegrationTest extends ApiTestSupport {
     @DisplayName("competition status changes stamp publication and cancellation dates")
     void competitionLifecycle() throws Exception {
         String comp = createCompetition("DRAFT", null, null);
-        JsonNode c = data(mockMvc.perform(get("/competitions/" + comp)).andReturn());
+        JsonNode c = data(mockMvc.perform(as(STAFF, get("/competitions/" + comp))).andReturn());
         assertThat(c.has("publishedAt")).isFalse();
 
         Map<String, Object> body = new HashMap<>();

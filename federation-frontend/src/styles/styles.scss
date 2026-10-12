@@ -70,3 +70,10 @@
   .animate-fade-in       { animation: fade-in 200ms ease-in both; }
   .animate-slide-in-left { animation: slide-in-left 250ms ease-out both; }
 }
+
+// ── Material ⇄ Tailwind preflight fixes ────────────────────────────────────
+// Preflight gives every element a solid right border style, which draws a
+// vertical line through the label notch of outlined form fields.
+.mdc-notched-outline__notch {
+  border-right-style: none !important;
+}

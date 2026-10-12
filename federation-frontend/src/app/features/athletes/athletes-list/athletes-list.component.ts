@@ -25,6 +25,7 @@ import { LoadingSpinnerComponent } from '@shared/components/loading-spinner/load
 import { EmptyStateComponent }     from '@shared/components/empty-state/empty-state.component';
 import { ConfirmDialogComponent }  from '@shared/components/confirm-dialog/confirm-dialog.component';
 import { InitialsPipe } from '@shared/pipes';
+import { pageContext } from '@shared/utils/page-context';
 
 export interface Athlete {
   id: string;
@@ -58,8 +59,8 @@ export interface Athlete {
   template: `
     <app-page-header
       title="Athletes"
-      subtitle="Manage federation-registered athletes"
-      [breadcrumbs]="[{ label: 'Admin', path: '/admin' }, { label: 'Athletes' }]">
+      [subtitle]="ctx.backOffice ? 'Manage federation-registered athletes' : 'Licensed athletes of the federation'"
+      [breadcrumbs]="ctx.crumbs()">
       @if (canManage) {
         <a mat-flat-button color="primary" routerLink="new" actions>
           <mat-icon>person_add</mat-icon> Add Athlete
@@ -238,10 +239,12 @@ export interface Athlete {
           <a mat-menu-item [routerLink]="[athlete.id, 'edit']">
             <mat-icon>edit</mat-icon> Edit
           </a>
-          <mat-divider />
-          <button mat-menu-item class="!text-red-600" (click)="confirmDelete(athlete)">
-            <mat-icon class="!text-red-600">delete</mat-icon> Delete
-          </button>
+          @if (canDelete) {
+            <mat-divider />
+            <button mat-menu-item class="!text-red-600" (click)="confirmDelete(athlete)">
+              <mat-icon class="!text-red-600">delete</mat-icon> Delete
+            </button>
+          }
         }
       </ng-template>
     </mat-menu>
@@ -279,8 +282,15 @@ export class AthletesListComponent implements OnInit {
   sortField = 'lastName';
   sortDir   = 'asc';
 
+  readonly ctx = pageContext('athletes', 'Athletes');
+
   get canManage(): boolean {
-    return this.auth.hasAnyRole([UserRole.ADMIN, UserRole.FEDERATION_STAFF, UserRole.CLUB_MANAGER]);
+    return this.ctx.backOffice
+      && this.auth.hasAnyRole([UserRole.ADMIN, UserRole.FEDERATION_STAFF, UserRole.CLUB_MANAGER]);
+  }
+
+  get canDelete(): boolean {
+    return this.ctx.backOffice && this.auth.hasAnyRole([UserRole.ADMIN, UserRole.FEDERATION_STAFF]);
   }
 
   hasActiveFilters(): boolean {

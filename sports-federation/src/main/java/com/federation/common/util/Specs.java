@@ -38,6 +38,11 @@ public final class Specs {
         return (root, query, cb) -> cb.equal(path(root, path), value);
     }
 
+    public static <T> Specification<T> notEq(String path, Object value) {
+        if (value == null) return null;
+        return (root, query, cb) -> cb.notEqual(path(root, path), value);
+    }
+
     public static <T> Specification<T> onOrAfter(String path, LocalDate value) {
         if (value == null) return null;
         return (root, query, cb) -> cb.greaterThanOrEqualTo(Specs.<LocalDate>path(root, path), value);

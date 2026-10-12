@@ -58,7 +58,7 @@ function handleError(error: HttpErrorResponse, notify: NotificationService): voi
     }
 
     case 403:
-      notify.error('You do not have permission to perform this action.');
+      notify.error(body?.message || 'You do not have permission to perform this action.');
       break;
 
     case 404:

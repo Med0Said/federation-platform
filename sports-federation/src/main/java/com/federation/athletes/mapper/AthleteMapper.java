@@ -16,6 +16,7 @@ public interface AthleteMapper {
     @Mapping(target = "clubId",    source = "club.id")
     @Mapping(target = "clubName",  source = "club.name")
     @Mapping(target = "userId",    source = "user.id")
+    @Mapping(target = "restricted", ignore = true)
     AthleteResponse toResponse(Athlete athlete);
 
     ///@Mapping(target = "id",        ignore = true)

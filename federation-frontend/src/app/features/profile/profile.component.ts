@@ -184,7 +184,11 @@ export class ProfileComponent implements OnInit {
     if (this.profileForm.invalid) return;
     this.profileSaving.set(true);
     this.api.patch('/auth/me', this.profileForm.value).subscribe({
-      next:  () => { this.notify.success('Profile updated.'); this.profileSaving.set(false); },
+      next:  () => {
+        this.notify.success('Profile updated.');
+        this.profileSaving.set(false);
+        this.auth.loadProfile().subscribe(); // refresh the name shown in the header
+      },
       error: () => this.profileSaving.set(false),
     });
   }

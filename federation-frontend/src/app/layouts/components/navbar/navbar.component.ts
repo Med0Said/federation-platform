@@ -66,11 +66,17 @@ interface NavLink {
 
             @if (auth.isAuthenticated()) {
               <!-- Admin dashboard shortcut -->
-              @if (auth.canAccessAdmin()) {
+              @if (auth.canAccessAdmin() || auth.hasRole(UserRole.CLUB_MANAGER)) {
                 <a mat-stroked-button routerLink="/admin/dashboard"
                    class="hidden sm:inline-flex !text-sm">
                   <mat-icon class="!text-base mr-1">dashboard</mat-icon>
                   Dashboard
+                </a>
+              } @else if (auth.hasRole(UserRole.ATHLETE)) {
+                <a mat-stroked-button routerLink="/portal/registrations"
+                   class="hidden sm:inline-flex !text-sm">
+                  <mat-icon class="!text-base mr-1">how_to_reg</mat-icon>
+                  My Portal
                 </a>
               }
 
@@ -135,6 +141,7 @@ interface NavLink {
   `,
 })
 export class NavbarComponent {
+  readonly UserRole = UserRole;
   readonly auth         = inject(AuthService);
   readonly themeService = inject(ThemeService);
 

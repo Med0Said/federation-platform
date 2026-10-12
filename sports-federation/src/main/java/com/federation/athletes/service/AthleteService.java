@@ -192,6 +192,7 @@ public class AthleteService {
             r.setNotes(null);
             r.setUserId(null);
             r.setLicenseExpiry(null);
+            r.setRestricted(true);
         }
         return r;
     }

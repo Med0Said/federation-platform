@@ -38,6 +38,8 @@ public class AthleteResponse {
     private String          photoUrl;
     private String          notes;
     private UUID            userId;
+    /** True when contact, medical and internal fields were withheld from this caller. */
+    private boolean         restricted;
     private Instant         createdAt;
     private Instant         updatedAt;
 }

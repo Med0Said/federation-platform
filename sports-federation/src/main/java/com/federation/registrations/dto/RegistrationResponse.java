@@ -1,5 +1,6 @@
 package com.federation.registrations.dto;
 
+import com.federation.competitions.entity.CompetitionStatus;
 import com.federation.registrations.entity.RegistrationStatus;
 import lombok.*;
 
@@ -15,6 +16,7 @@ public class RegistrationResponse {
     private UUID               competitionId;
     private String             competitionName;
     private LocalDate          competitionStartDate;
+    private CompetitionStatus  competitionStatus;
     private UUID               eventId;
     private String             eventName;
     private String             discipline;

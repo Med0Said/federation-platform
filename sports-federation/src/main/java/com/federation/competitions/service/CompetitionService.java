@@ -7,6 +7,7 @@ import com.federation.clubs.repository.ClubRepository;
 import com.federation.common.exception.BadRequestException;
 import com.federation.common.exception.ResourceNotFoundException;
 import com.federation.common.response.PagedResponse;
+import com.federation.common.security.AccessControl;
 import com.federation.competitions.dto.CompetitionRequest;
 import com.federation.competitions.dto.CompetitionResponse;
 import com.federation.competitions.entity.Competition;
@@ -50,6 +51,7 @@ public class CompetitionService {
     private final CompetitionMapper          competitionMapper;
     private final CompetitionRegistrationRepository registrationRepository;
     private final ResultRepository           resultRepository;
+    private final AccessControl              access;
 
     // ── Read ──────────────────────────────────────────────────────────────
 
@@ -60,8 +62,10 @@ public class CompetitionService {
         Specification<Competition> spec = Specification
                 .where(Specs.<Competition>search(search, "name", "sport", "venueCity"))
                 .and(Specs.eq("status", Specs.parseEnum(CompetitionStatus.class, status)))
-                .and(Specs.onOrAfter("startDate", parseDate(from)))
-                .and(Specs.onOrBefore("endDate", parseDate(to)));
+                // Date window: competitions that are not over before "from" and have started by "to"
+                .and(Specs.onOrAfter("endDate", parseDate(from)))
+                .and(Specs.onOrBefore("startDate", parseDate(to)))
+                .and(access.isStaff() ? null : Specs.<Competition>notEq("status", CompetitionStatus.DRAFT));
 
         Page<Competition> page = competitionRepository.findAll(spec, pageable);
 
@@ -70,14 +74,14 @@ public class CompetitionService {
 
     @Transactional(readOnly = true)
     public CompetitionResponse findById(UUID id) {
-        return toResponse(getOrThrow(id));
+        return toResponse(visibleOrThrow(getOrThrow(id)));
     }
 
     @Transactional(readOnly = true)
     public CompetitionResponse findBySlug(String slug) {
         Competition c = competitionRepository.findBySlug(slug)
                 .orElseThrow(() -> new ResourceNotFoundException("Competition", "slug", slug));
-        return toResponse(c);
+        return toResponse(visibleOrThrow(c));
     }
 
     // ── Write ─────────────────────────────────────────────────────────────
@@ -154,6 +158,14 @@ public class CompetitionService {
         if (c.getStatus() == CompetitionStatus.CANCELLED) {
             c.setCancelledAt(Instant.now());
         }
+    }
+
+    /** Draft competitions are internal: 404 for everyone but federation staff. */
+    public Competition visibleOrThrow(Competition c) {
+        if (c.getStatus() == CompetitionStatus.DRAFT && !access.isStaff()) {
+            throw new ResourceNotFoundException("Competition", "id", c.getId());
+        }
+        return c;
     }
 
     private Competition getOrThrow(UUID id) {

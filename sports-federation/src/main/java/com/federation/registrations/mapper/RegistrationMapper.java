@@ -11,6 +11,7 @@ public interface RegistrationMapper {
     @Mapping(target = "competitionId",        source = "competition.id")
     @Mapping(target = "competitionName",      source = "competition.name")
     @Mapping(target = "competitionStartDate", source = "competition.startDate")
+    @Mapping(target = "competitionStatus",    source = "competition.status")
     @Mapping(target = "eventId",              source = "event.id")
     @Mapping(target = "eventName",            source = "event.name")
     @Mapping(target = "discipline",           source = "event.discipline")

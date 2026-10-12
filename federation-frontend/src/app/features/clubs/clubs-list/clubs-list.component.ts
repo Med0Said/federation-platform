@@ -1,50 +1,37 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { ReactiveFormsModule, FormControl } from '@angular/forms';
-import { MatTableModule }    from '@angular/material/table';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule }    from '@angular/material/input';
-import { MatButtonModule }   from '@angular/material/button';
-import { MatIconModule }     from '@angular/material/icon';
-import { MatMenuModule }     from '@angular/material/menu';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
-import { ApiService }              from '@core/services/api.service';
-import { AuthService }             from '@core/services/auth.service';
-import { UserRole }                from '@core/models';
-import { PageHeaderComponent }     from '@shared/components/page-header/page-header.component';
-import { StatusChipComponent }     from '@shared/components/status-chip/status-chip.component';
+import { ApiService } from '@core/services/api.service';
+import { AuthService } from '@core/services/auth.service';
+import { Club, UserRole } from '@core/models';
+import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
+import { StatusChipComponent } from '@shared/components/status-chip/status-chip.component';
 import { LoadingSpinnerComponent } from '@shared/components/loading-spinner/loading-spinner.component';
-import { EmptyStateComponent }     from '@shared/components/empty-state/empty-state.component';
-
-export interface Club {
-  id: string;
-  name: string;
-  shortName?: string;
-  city?: string;
-  region?: string;
-  country: string;
-  status: string;
-  foundedYear?: number;
-  logoUrl?: string;
-  activeAthletes?: number;
-}
+import { EmptyStateComponent } from '@shared/components/empty-state/empty-state.component';
+import { pageContext } from '@shared/utils/page-context';
 
 @Component({
-  selector:   'app-clubs-list',
+  selector: 'app-clubs-list',
   standalone: true,
   imports: [
     CommonModule, RouterModule, ReactiveFormsModule,
-    MatTableModule, MatPaginatorModule, MatFormFieldModule, MatInputModule,
-    MatButtonModule, MatIconModule, MatMenuModule,
+    MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatIconModule, MatPaginatorModule,
     PageHeaderComponent, StatusChipComponent, LoadingSpinnerComponent, EmptyStateComponent,
   ],
   template: `
     <app-page-header title="Clubs"
-      [breadcrumbs]="[{ label: 'Admin', path: '/admin' }, { label: 'Clubs' }]">
-      @if (canManage) {
+      [subtitle]="ctx.backOffice ? 'Federation-registered clubs' : 'Discover the clubs of the federation'"
+      [breadcrumbs]="ctx.crumbs()">
+      @if (canCreate) {
         <a mat-flat-button color="primary" routerLink="new" actions>
           <mat-icon>add</mat-icon> New Club
         </a>
@@ -52,21 +39,32 @@ export interface Club {
     </app-page-header>
 
     <div class="card-padded mb-4">
-      <mat-form-field appearance="outline" class="w-full max-w-md">
-        <mat-label>Search clubs…</mat-label>
-        <input matInput [formControl]="searchCtrl" autocomplete="off" />
-        <mat-icon matPrefix>search</mat-icon>
-      </mat-form-field>
+      <div class="flex flex-wrap gap-3 items-center">
+        <mat-form-field appearance="outline" class="flex-1 min-w-48 max-w-md">
+          <mat-label>Search by name or city…</mat-label>
+          <input matInput [formControl]="searchCtrl" autocomplete="off" />
+          <mat-icon matPrefix>search</mat-icon>
+        </mat-form-field>
+        @if (ctx.backOffice) {
+          <mat-form-field appearance="outline" class="w-44">
+            <mat-label>Status</mat-label>
+            <mat-select [formControl]="statusCtrl">
+              <mat-option value="">All</mat-option>
+              <mat-option value="ACTIVE">Active</mat-option>
+              <mat-option value="SUSPENDED">Suspended</mat-option>
+              <mat-option value="DISSOLVED">Dissolved</mat-option>
+            </mat-select>
+          </mat-form-field>
+        }
+      </div>
     </div>
 
     <div class="card relative">
       @if (loading()) { <app-loading-spinner [overlay]="true" /> }
       @if (!loading() && clubs().length === 0) {
         <app-empty-state icon="groups" title="No clubs found"
-          subtitle="Register your first club to get started."
-          [actionLabel]="canManage ? 'New Club' : ''" />
+          [subtitle]="searchCtrl.value ? 'Try another search.' : 'No club has been registered yet.'" />
       } @else {
-        <!-- Grid layout for clubs -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
           @for (club of clubs(); track club.id) {
             <a [routerLink]="[club.id]"
@@ -78,7 +76,7 @@ export interface Club {
               } @else {
                 <div class="w-12 h-12 rounded-lg bg-primary-100 flex items-center justify-center
                             text-primary-700 font-bold text-lg flex-shrink-0">
-                  {{ (club.shortName ?? club.name).charAt(0) }}
+                  {{ (club.shortName || club.name).charAt(0) }}
                 </div>
               }
               <div class="flex-1 min-w-0">
@@ -87,16 +85,14 @@ export interface Club {
                 <p class="text-xs text-surface-400 mt-0.5">{{ club.city }}{{ club.region ? ', ' + club.region : '' }}</p>
                 <div class="flex items-center gap-2 mt-1.5">
                   <app-status-chip [status]="club.status" />
-                  @if (club.activeAthletes !== undefined) {
-                    <span class="text-xs text-surface-500">{{ club.activeAthletes }} athletes</span>
-                  }
+                  <span class="text-xs text-surface-500">{{ club.activeAthletes }} athletes</span>
                 </div>
               </div>
             </a>
           }
         </div>
         <div class="border-t border-surface-100">
-          <mat-paginator [length]="total()" [pageSize]="24" [pageSizeOptions]="[12,24,48]"
+          <mat-paginator [length]="total()" [pageSize]="pageSize()" [pageSizeOptions]="[12, 24, 48]"
             [pageIndex]="pageIndex()" (page)="onPage($event)" showFirstLastButtons />
         </div>
       }
@@ -104,29 +100,37 @@ export interface Club {
   `,
 })
 export class ClubsListComponent implements OnInit {
-  private api  = inject(ApiService);
-  readonly auth = inject(AuthService);
+  private api   = inject(ApiService);
+  private auth  = inject(AuthService);
+  readonly ctx  = pageContext('clubs', 'Clubs');
 
   clubs     = signal<Club[]>([]);
   loading   = signal(true);
   total     = signal(0);
   pageIndex = signal(0);
+  pageSize  = signal(24);
   searchCtrl = new FormControl('');
+  statusCtrl = new FormControl('');
 
-  get canManage(): boolean {
-    return this.auth.hasAnyRole([UserRole.ADMIN, UserRole.FEDERATION_STAFF, UserRole.CLUB_MANAGER]);
+  /** Only federation staff register new clubs; managers edit their own from the detail page. */
+  get canCreate(): boolean {
+    return this.ctx.backOffice && this.auth.hasAnyRole([UserRole.ADMIN, UserRole.FEDERATION_STAFF]);
   }
 
   ngOnInit(): void {
     this.load();
     this.searchCtrl.valueChanges.pipe(debounceTime(350), distinctUntilChanged())
       .subscribe(() => { this.pageIndex.set(0); this.load(); });
+    this.statusCtrl.valueChanges.subscribe(() => { this.pageIndex.set(0); this.load(); });
   }
 
   load(): void {
     this.loading.set(true);
-    const params: Record<string, any> = { page: this.pageIndex(), size: 24 };
+    const params: Record<string, any> = { page: this.pageIndex(), size: this.pageSize(), sort: 'name,asc' };
     if (this.searchCtrl.value) params['search'] = this.searchCtrl.value;
+    // The public site only lists active clubs
+    const status = this.ctx.backOffice ? this.statusCtrl.value : 'ACTIVE';
+    if (status) params['status'] = status;
 
     this.api.getPaged<Club>('/clubs', params).subscribe({
       next:  p => { this.clubs.set(p.content); this.total.set(p.totalElements); this.loading.set(false); },
@@ -134,5 +138,9 @@ export class ClubsListComponent implements OnInit {
     });
   }
 
-  onPage(e: PageEvent): void { this.pageIndex.set(e.pageIndex); this.load(); }
+  onPage(e: PageEvent): void {
+    this.pageIndex.set(e.pageIndex);
+    this.pageSize.set(e.pageSize);
+    this.load();
+  }
 }

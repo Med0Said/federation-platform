@@ -103,6 +103,14 @@ export const routes: Routes = [
         title: 'Forgot Password',
       },
       {
+        path: 'reset-password',
+        canActivate: [guestGuard],
+        loadComponent: () =>
+          import('./features/auth/reset-password/reset-password.component')
+            .then(m => m.ResetPasswordComponent),
+        title: 'Reset Password',
+      },
+      {
         path: '',
         pathMatch: 'full',
         redirectTo: 'login',

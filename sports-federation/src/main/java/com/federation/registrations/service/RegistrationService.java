@@ -76,6 +76,10 @@ public class RegistrationService {
     private static final Set<CompetitionStatus> STAFF_REGISTRATION_WINDOW = EnumSet.of(
             CompetitionStatus.PUBLISHED, CompetitionStatus.REGISTRATION_OPEN, CompetitionStatus.REGISTRATION_CLOSED);
 
+    /** Athletes and managers can no longer withdraw once the competition is under way or over. */
+    private static final Set<CompetitionStatus> WITHDRAWAL_CLOSED = EnumSet.of(
+            CompetitionStatus.ONGOING, CompetitionStatus.COMPLETED, CompetitionStatus.CANCELLED);
+
     private final CompetitionRegistrationRepository registrationRepository;
     private final CompetitionRepository             competitionRepository;
     private final CompetitionEventRepository        eventRepository;
@@ -200,6 +204,10 @@ public class RegistrationService {
         if (!access.isStaff()) {
             if (target != RegistrationStatus.CANCELLED || !access.canAccessAthlete(reg.getAthlete())) {
                 throw new ForbiddenException("Only federation staff can change registration status.");
+            }
+            if (WITHDRAWAL_CLOSED.contains(reg.getCompetition().getStatus())) {
+                throw new BusinessRuleViolationException(
+                        "Withdrawals are closed: the competition is " + reg.getCompetition().getStatus() + ".");
             }
         }
         if (from == target) {

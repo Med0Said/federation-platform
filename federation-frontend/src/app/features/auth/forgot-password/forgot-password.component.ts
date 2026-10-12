@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule }      from '@angular/common';
 import { RouterModule }      from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
@@ -6,6 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule }     from '@angular/material/input';
 import { MatButtonModule }    from '@angular/material/button';
 import { MatIconModule }      from '@angular/material/icon';
+import { ApiService }         from '@core/services/api.service';
 
 @Component({
   selector:   'app-forgot-password',
@@ -53,9 +54,9 @@ import { MatIconModule }      from '@angular/material/icon';
                 }
               </mat-form-field>
 
-              <button mat-flat-button color="primary" type="submit"
+              <button mat-flat-button color="primary" type="submit" [disabled]="sending()"
                       class="w-full !h-11 !rounded-xl !font-semibold">
-                Send Reset Link
+                {{ sending() ? 'Sending…' : 'Send Reset Link' }}
               </button>
             </form>
           }
@@ -74,7 +75,10 @@ import { MatIconModule }      from '@angular/material/icon';
   `,
 })
 export class ForgotPasswordComponent {
-  private fb = inject(FormBuilder);
+  private fb  = inject(FormBuilder);
+  private api = inject(ApiService);
+
+  sending = signal(false);
 
   submitted     = false;
   submittedEmail = '';
@@ -85,8 +89,12 @@ export class ForgotPasswordComponent {
 
   onSubmit(): void {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
-    // TODO: wire up to /auth/forgot-password API when backend supports it
-    this.submittedEmail = this.form.value.email!;
-    this.submitted = true;
+    this.sending.set(true);
+    const email = this.form.value.email!;
+    // The API answers 200 whether or not the account exists (no account enumeration)
+    this.api.post('/auth/forgot-password', { email }).subscribe({
+      next: () => { this.submittedEmail = email; this.submitted = true; this.sending.set(false); },
+      error: () => this.sending.set(false),
+    });
   }
 }

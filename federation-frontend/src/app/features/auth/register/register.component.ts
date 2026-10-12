@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CommonModule }      from '@angular/common';
 import { RouterModule }      from '@angular/router';
 import { ReactiveFormsModule, FormBuilder, Validators, AbstractControl } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule }     from '@angular/material/input';
 import { MatButtonModule }    from '@angular/material/button';
@@ -173,6 +173,7 @@ export class RegisterComponent {
   private fb    = inject(FormBuilder);
   private auth  = inject(AuthService);
   private router = inject(Router);
+  private route  = inject(ActivatedRoute);
 
   showPw        = false;
   loading       = false;
@@ -225,7 +226,8 @@ export class RegisterComponent {
 
     this.auth.register({ firstName: firstName!, lastName: lastName!,
                          username: username!, email: email!, password }).subscribe({
-      next: () => this.router.navigate(['/admin/dashboard']),
+      // New accounts have the public role: send them back where they came from, or home
+      next: () => this.router.navigateByUrl(this.route.snapshot.queryParamMap.get('returnUrl') ?? '/home'),
       error: (err) => {
         this.loading      = false;
         this.errorMessage = err?.error?.message ?? 'Registration failed. Please try again.';

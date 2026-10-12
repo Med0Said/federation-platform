@@ -9,7 +9,7 @@ import { ApiService }     from '@core/services/api.service';
 import { PageHeaderComponent } from '@shared/components/page-header/page-header.component';
 import { LoadingSpinnerComponent } from '@shared/components/loading-spinner/loading-spinner.component';
 import { RelativeTimePipe, RoleLabelPipe } from '@shared/pipes';
-import { UserRole } from '@core/models';
+import { DashboardStats, UserRole } from '@core/models';
 
 interface StatCard {
   label:    string;
@@ -176,27 +176,35 @@ export class DashboardComponent implements OnInit {
       visible: true },
   ];
 
-  readonly statusItems = [
-    { label: 'API Status',       value: 'Operational', dotColor: 'bg-green-500' },
-    { label: 'Angular Version',  value: '19.x',        dotColor: 'bg-blue-500'  },
-    { label: 'Spring Boot',      value: '3.2.x',       dotColor: 'bg-green-500' },
-    { label: 'Database',         value: 'PostgreSQL 16',dotColor: 'bg-green-500' },
+  statusItems = [
+    { label: 'API Status',             value: 'Checking…', dotColor: 'bg-gray-400' },
+    { label: 'Open for registration',  value: '—',         dotColor: 'bg-blue-500' },
+    { label: 'Pending registrations',  value: '—',         dotColor: 'bg-amber-500' },
+    { label: 'Waiting lists',          value: '—',         dotColor: 'bg-blue-500' },
+    { label: 'Upcoming competitions',  value: '—',         dotColor: 'bg-green-500' },
   ];
 
   ngOnInit(): void {
-    // Load live stats — gracefully degrade if endpoint not ready
-    this.api.get<any>('/actuator/health').subscribe({
-      next:  () => this.loading.set(false),
-      error: () => this.loading.set(false),
+    this.api.getRaw<any>('/actuator/health').subscribe({
+      // Actuator answers {"status":"UP"} without the ApiResponse envelope
+      next:  (h: any) => this.statusItems[0] = { ...this.statusItems[0], value: h?.status === 'UP' ? 'Operational' : (h?.status ?? 'Unknown'), dotColor: h?.status === 'UP' ? 'bg-green-500' : 'bg-amber-500' },
+      error: () => this.statusItems[0] = { ...this.statusItems[0], value: 'Unreachable', dotColor: 'bg-red-500' },
     });
 
-    // TODO: Load real counts via /admin/stats endpoint
-    setTimeout(() => {
-      this.statCards[0].value = '1,240';
-      this.statCards[1].value = '45';
-      this.statCards[2].value = '12';
-      this.statCards[3].value = '38';
-      this.loading.set(false);
-    }, 600);
+    this.api.get<DashboardStats>('/dashboard/stats').subscribe({
+      next: s => {
+        const n = (v: number) => v.toLocaleString();
+        this.statCards[0].value = n(s.activeAthletes);
+        this.statCards[1].value = n(s.activeClubs);
+        this.statCards[2].value = n(s.totalCompetitions);
+        this.statCards[3].value = n(s.publishedNews);
+        this.statusItems[1].value = n(s.openForRegistration);
+        this.statusItems[2].value = n(s.pendingRegistrations);
+        this.statusItems[3].value = n(s.waitlistedRegistrations);
+        this.statusItems[4].value = n(s.upcomingCompetitions);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
   }
 }

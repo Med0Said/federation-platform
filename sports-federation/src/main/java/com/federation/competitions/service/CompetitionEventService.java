@@ -36,6 +36,7 @@ public class CompetitionEventService {
     private final CompetitionRegistrationRepository registrationRepository;
     private final ResultRepository                  resultRepository;
     private final CompetitionEventMapper            eventMapper;
+    private final CompetitionService                competitionService;
 
     @Transactional(readOnly = true)
     public List<CompetitionEventResponse> findByCompetition(UUID competitionId) {
@@ -93,13 +94,14 @@ public class CompetitionEventService {
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private Competition requireCompetition(UUID competitionId) {
-        return competitionRepository.findById(competitionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Competition", "id", competitionId));
+        return competitionService.visibleOrThrow(competitionRepository.findById(competitionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Competition", "id", competitionId)));
     }
 
     private CompetitionEvent getOrThrow(UUID competitionId, UUID eventId) {
         CompetitionEvent event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new ResourceNotFoundException("CompetitionEvent", "id", eventId));
+        competitionService.visibleOrThrow(event.getCompetition());
         if (!event.getCompetition().getId().equals(competitionId)) {
             throw new ResourceNotFoundException("CompetitionEvent", "id", eventId);
         }

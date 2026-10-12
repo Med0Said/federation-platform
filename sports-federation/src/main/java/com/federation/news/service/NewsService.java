@@ -212,7 +212,7 @@ public class NewsService {
             news.setRelatedClub(club);
         }
         // Tags
-        if (request.getTagIds() != null && !request.getTagIds().isEmpty()) {
+        if (request.getTagIds() != null) { // an empty list clears the tags
             Set<Tag> tags = new HashSet<>();
             for (UUID tagId : request.getTagIds()) {
                 Tag tag = tagRepository.findById(tagId)
